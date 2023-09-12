@@ -46,8 +46,16 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
       if let Some(Ok(chunk)) = file.next().await {
         if let Ok(mut new_file) = File::create(format!("uploads/{}", &file_name)) {
           new_file.write_all(&chunk)?;
-          println!("File saved successfully: '{}'", file_name);
-          return Ok(HttpResponse::Ok().body(format!("upload success, saved {}", file_name)));
+          println!(
+            "File saved successfully: '{}' len: {}",
+            file_name,
+            chunk.len()
+          );
+          return Ok(HttpResponse::Ok().body(format!(
+            "upload success, saved {}, len: {}",
+            file_name,
+            chunk.len()
+          )));
         }
       }
     }
