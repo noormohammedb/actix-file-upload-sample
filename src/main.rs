@@ -1,7 +1,7 @@
 use actix_files::Files;
 use actix_multipart::Multipart;
 use actix_web::{http::header::DispositionParam, post, App, Error, HttpResponse, HttpServer};
-use std::{fs::File, io::Write};
+use async_std::{fs::File, io::WriteExt};
 
 use futures_util::StreamExt as _;
 
@@ -32,7 +32,7 @@ async fn main() -> std::io::Result<()> {
 
 #[post("/upload")]
 async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
-  if let Some(Ok(mut file)) = payload.next().await {
+  while let Some(Ok(mut file)) = payload.next().await {
     let con_dispo = file.content_disposition().clone();
     if let Some(file_name) = &con_dispo
       .parameters
@@ -43,21 +43,21 @@ async fn upload(mut payload: Multipart) -> Result<HttpResponse, Error> {
       })
       .next()
     {
-      if let Some(Ok(chunk)) = file.next().await {
-        if let Ok(mut new_file) = File::create(format!("uploads/{}", &file_name)) {
-          new_file.write_all(&chunk)?;
-          println!(
-            "File saved successfully: '{}' len: {}",
-            file_name,
-            chunk.len()
-          );
-          return Ok(HttpResponse::Ok().body(format!(
-            "upload success, saved {}, len: {}",
-            file_name,
-            chunk.len()
-          )));
-        }
+      let mut new_file = File::create(format!("uploads/{}", &file_name)).await?;
+      let mut data_len = 0;
+
+      while let Some(chunk_wrap) = file.next().await {
+        let chunk = chunk_wrap.unwrap();
+        println!("incoming {} bytes", chunk.len());
+        new_file.write_all(&chunk).await?;
+        data_len += chunk.len();
       }
+
+      println!("File saved successfully: '{}' len: {}", file_name, data_len);
+      return Ok(HttpResponse::Ok().body(format!(
+        "upload success, saved {}, len: {}",
+        file_name, data_len
+      )));
     }
   }
   Ok(HttpResponse::BadRequest().body("something went wrong"))
